@@ -1,0 +1,58 @@
+{
+  "name": "gbfr-act-ws-package",
+  "private": false,
+  "version": "1.0.4",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/gbfr-act-ws.umd.cjs",
+  "module": "./dist/gbfr-act-ws.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/gbfr-act-ws.js",
+      "require": "./dist/gbfr-act-ws.umd.cjs"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Souma-Sumire/gbfr-act-ws.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Souma-Sumire/gbfr-act-ws/issues"
+  },
+  "homepage": "https://github.com/Souma-Sumire/gbfr-act-ws#readme",
+  "keywords": [
+    "gbfr"
+  ],
+  "author": "Souma",
+  "devDependencies": {
+    "@types/node": "^20.11.20",
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
+    "eslint": "^8.56.0",
+    "pathe": "^1.1.2",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.4"
+  },
+  "dependencies": {
+    "cz-conventional-changelog-zh": "^0.0.2",
+    "vite-plugin-dts": "^3.7.3"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog-zh"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
