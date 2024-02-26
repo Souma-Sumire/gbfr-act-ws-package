@@ -101,6 +101,7 @@ class _GbfrActWs {
   private combatSubscriptions = 0;
   private lastUpdateTimestamp = 0;
   private rafId: number = -1;
+  private inCombat: boolean = false;
 
   constructor(options?: Partial<Options>) {
     this.options = { ...this.options, ...options };
@@ -200,6 +201,7 @@ class _GbfrActWs {
     const [, , target_id] = target;
     if (target_id === 0x22a350f) return; // HARDCODE: 对欧根附加炸弹造成的伤害不进行记录
     if (source_party_idx === -1) return; // 奥义连锁？
+    this.inCombat = true;
     const combat = this.getLatestCombat();
     let actor = combat.actors.find((v) => v.idx === source_idx);
     if (actor === undefined) {
@@ -216,6 +218,7 @@ class _GbfrActWs {
   };
 
   private handleEnterAreaMessage = (_data: EnterArea): void => {
+    this.inCombat = false;
     this.newCombat();
   };
 
@@ -223,7 +226,8 @@ class _GbfrActWs {
     if (
       (this.lastUpdateTimestamp === 0 ||
         timestamp - this.lastUpdateTimestamp > this.options.updateInterval) &&
-      this.socket?.readyState === WebSocket.OPEN
+      this.socket?.readyState === WebSocket.OPEN &&
+      this.inCombat
     ) {
       this.emit("combat_data", (listener) => {
         for (let i = this.combats.length - 1; i >= 0; i--) {
