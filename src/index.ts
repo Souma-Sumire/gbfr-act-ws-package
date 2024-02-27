@@ -1,28 +1,52 @@
-type DamageSource = [type: string, idx: number, id: number, party_idx: number];
+type SourceOrTargetRaw = [type: string, idx: number, id: number, party_idx: number];
 
-type Damage = {
+interface DamageRaw {
   type: "damage";
   time_ms: number;
   data: {
     action_id: number;
     damage: number;
     flags: number;
-    source: DamageSource;
-    target: DamageSource;
+    source: SourceOrTargetRaw;
+    target: SourceOrTargetRaw;
   };
-};
+}
 
-type EnterArea = {
+interface EnterAreaRaw {
   type: "enter_area";
   time_ms: number;
-};
+}
+
+interface SourceOrTarget {
+  type: string;
+  idx: number;
+  id: number;
+  partyIdx: number;
+}
+
+interface Damage {
+  type: "damage";
+  timeMs: number;
+  data: {
+    actionId: number;
+    damage: number;
+    flags: number;
+    source: SourceOrTarget;
+    target: SourceOrTarget;
+  };
+}
+
+interface EnterArea {
+  type: "enterArea";
+  timeMs: number;
+}
 
 class Action {
   constructor(
     public timestamp: number,
     public damage: number,
-    public source: DamageSource,
-    public target: DamageSource,
+    public source: SourceOrTarget,
+    public target: SourceOrTarget,
     public actionId: number,
   ) {}
 }
@@ -31,13 +55,11 @@ class Actor {
   public actions: Action[] = [];
   public damage: number = 0;
   public hexId: string;
-  public partyIdx: number;
   public addAction(action: Action) {
     this.actions.push(action);
     this.damage += action.damage;
   }
-  constructor(public idx: number, public id: number, party_idx: number) {
-    this.partyIdx = party_idx;
+  constructor(public idx: number, public id: number, public partyIdx: number) {
     this.hexId = numberToHexStringWithZFill(this.id);
   }
 }
@@ -48,7 +70,7 @@ class CombatData {
   constructor(public title: string) {
     this.#timestamp = Date.now();
   }
-  get duration() {
+  public get duration() {
     const ms = Date.now() - this.#timestamp;
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -60,16 +82,16 @@ class CombatData {
 
     return { ms, seconds, minutes, MMSS };
   }
-  get partyDamage() {
+  public get partyDamage() {
     return this.actors.reduce((sum, actor) => sum + actor.damage, 0);
   }
 }
 
-type MessageData = {
+interface MessageData {
   damage: Damage;
-  enter_area: EnterArea;
-  combat_data: CombatData;
-};
+  enterArea: EnterArea;
+  combatData: CombatData;
+}
 
 type MessageName = keyof MessageData;
 
@@ -84,13 +106,47 @@ interface Options {
   maxCombats: number;
 }
 
+const isDamageMessage = (v: DamageRaw | EnterAreaRaw): v is DamageRaw => v.type === "damage";
+const isEnterAreaMessage = (v: DamageRaw | EnterAreaRaw): v is EnterAreaRaw => v.type === "enter_area";
+const transformDamage = (msg: DamageRaw): Damage => {
+  return {
+    type: "damage",
+    timeMs: msg.time_ms,
+    data: {
+      actionId: msg.data.action_id,
+      damage: msg.data.damage,
+      flags: msg.data.flags,
+      source: transformSourceOrTarget(msg.data.source),
+      target: transformSourceOrTarget(msg.data.target),
+    },
+  };
+};
+const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
+  return {
+    type: "enterArea",
+    timeMs: msg.time_ms,
+  };
+};
+
+const transformSourceOrTarget = (
+  { "0": type, "1": idx, "2": id, "3": party_idx }: SourceOrTargetRaw,
+): SourceOrTarget => ({ type, idx, id, partyIdx: party_idx });
+
+const transformMessage = (msg: DamageRaw | EnterAreaRaw): Damage | EnterArea => {
+  if (isDamageMessage(msg)) {
+    return transformDamage(msg);
+  } else if (isEnterAreaMessage(msg)) {
+    return transformEnterArea(msg);
+  }
+  throw new Error(`Unknown message type: ${JSON.stringify(msg)}`);
+};
+
 class _GbfrActWs {
   private messageHandlers: { [key in MessageName]: MessageHandler<key>[] } = {
     damage: [],
-    enter_area: [],
-    combat_data: [],
+    enterArea: [],
+    combatData: [],
   };
-  public port: number;
   private socket: WebSocket | null = null;
   private combats: CombatData[] = [];
   private combatCount: number = 0;
@@ -104,22 +160,20 @@ class _GbfrActWs {
   private lastUpdateTimestamp = 0;
   private rafId: number = -1;
   private inCombat: boolean = false;
-
   constructor(options?: Partial<Options>) {
     this.options = { ...this.options, ...options };
-    this.port = this.options.port;
     this.connect();
     this.registerMessageHandler();
   }
 
   private registerMessageHandler() {
     this.on("damage", (data) => this.handleDamageMessage(data));
-    this.on("enter_area", (data) => this.handleEnterAreaMessage(data));
+    this.on("enterArea", (data) => this.handleEnterAreaMessage(data));
   }
 
   public on<T extends MessageName>(event: T, handler: MessageHandler<T>): void {
     this.messageHandlers[event].push(handler);
-    if (event === "combat_data") {
+    if (event === "combatData") {
       this.combatSubscriptions++;
       if (this.combatSubscriptions === 1) {
         this.rafId = requestAnimationFrame(this.broadcastCombat);
@@ -136,7 +190,7 @@ class _GbfrActWs {
     if (index !== -1) {
       handlers.splice(index, 1);
     }
-    if (event === "combat_data") {
+    if (event === "combatData") {
       this.combatSubscriptions--;
       if (this.combatSubscriptions === 0) {
         cancelAnimationFrame(this.rafId);
@@ -145,7 +199,7 @@ class _GbfrActWs {
   }
 
   private connect() {
-    const url = `ws://localhost:${this.port}`;
+    const url = `ws://localhost:${this.options.port}`;
     console.debug(`尝试连接到WebSocket服务器 '${url}'`);
 
     if (this.socket !== null && this.socket.readyState !== WebSocket.CLOSED) {
@@ -159,8 +213,9 @@ class _GbfrActWs {
     });
 
     this.socket.addEventListener("message", (event) => {
-      const data: Damage | EnterArea = JSON.parse(event.data);
-      this.emit(data.type, (listener) => listener(data));
+      const msg: DamageRaw | EnterAreaRaw = JSON.parse(event.data);
+      const transformedMsg = transformMessage(msg);
+      this.emit(transformedMsg.type, (listener) => listener(transformedMsg));
     });
 
     this.socket.addEventListener("close", () => {
@@ -197,30 +252,30 @@ class _GbfrActWs {
     }
   }
 
-  private processActionId: (data: Damage["data"]) => number = ({ flags, action_id }) => {
+  private processActionId: (data: Damage["data"]) => number = ({ flags, actionId }) => {
     if (flags & (1 << 15)) return -3; // 追击因子
-    return action_id;
+    return actionId;
   };
 
   private handleDamageMessage = (data: Damage): void => {
-    const { source, target, damage } = data.data;
-    const [, source_idx, source_id, source_party_idx] = source;
-    const [, , target_id] = target;
-    if (target_id === 0x22a350f) return; // HARDCODE: 对欧根附加炸弹造成的伤害不进行记录
-    if (source_party_idx === -1) return; // 奥义连锁？
+    const { damage, source, target } = data.data;
+    const { type: _sourceType, idx: sourceIdx, id: sourceId, partyIdx: sourcePartyIdx } = source;
+    const { type: _targetType, idx: _targetIdx, id: targetId, partyIdx: _targetPartyIdx } = target;
+    if (targetId === 0x22a350f) return; // HARDCODE: 对欧根附加炸弹造成的伤害不进行记录
+    if (sourcePartyIdx === -1) return; // 奥义连锁？
     this.inCombat = true;
     const combat = this.getLatestCombat();
-    let actor = combat.actors.find((v) => v.idx === source_idx);
+    let actor = combat.actors.find((v) => v.idx === sourceIdx);
     if (actor === undefined) {
       actor = combat.actors[
         combat.actors.push(
-          new Actor(source_idx, source_id, source_party_idx),
+          new Actor(sourceIdx, sourceId, sourcePartyIdx),
         ) - 1
       ];
     }
     const actionId = this.processActionId(data.data);
     actor.addAction(
-      new Action(data.time_ms, damage, source, target, actionId),
+      new Action(data.timeMs, damage, source, target, actionId),
     );
   };
 
@@ -236,7 +291,7 @@ class _GbfrActWs {
       && this.socket?.readyState === WebSocket.OPEN
       && this.inCombat
     ) {
-      this.emit("combat_data", (listener) => {
+      this.emit("combatData", (listener) => {
         for (let i = this.combats.length - 1; i >= 0; i--) {
           const combat = this.combats[i];
           if (combat.partyDamage > 0) {
