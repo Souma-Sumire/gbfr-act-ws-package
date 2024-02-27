@@ -6,8 +6,8 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
-      name: "GbfrActWs",
-      fileName: "gbfr-act-ws",
+      name: "GbfrActWsPackage",
+      fileName: "gbfr-act-ws-package",
       formats: ["es", "cjs", "umd", "iife"],
     },
   },

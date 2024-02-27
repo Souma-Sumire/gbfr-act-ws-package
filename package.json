@@ -7,13 +7,13 @@
   "files": [
     "dist"
   ],
-  "main": "./dist/gbfr-act-ws.umd.cjs",
-  "module": "./dist/gbfr-act-ws.js",
+  "main": "./dist/gbfr-act-ws-package.umd.cjs",
+  "module": "./dist/gbfr-act-ws-package.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/gbfr-act-ws.js",
-      "require": "./dist/gbfr-act-ws.umd.cjs"
+      "import": "./dist/gbfr-act-ws-package.js",
+      "require": "./dist/gbfr-act-ws-package.umd.cjs"
     }
   },
   "scripts": {
@@ -23,12 +23,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Souma-Sumire/gbfr-act-ws.git"
+    "url": "git+https://github.com/Souma-Sumire/gbfr-act-ws-package.git"
   },
   "bugs": {
-    "url": "https://github.com/Souma-Sumire/gbfr-act-ws/issues"
+    "url": "https://github.com/Souma-Sumire/gbfr-act-ws-package/issues"
   },
-  "homepage": "https://github.com/Souma-Sumire/gbfr-act-ws#readme",
+  "homepage": "https://github.com/Souma-Sumire/gbfr-act-ws-package#readme",
   "keywords": [
     "gbfr"
   ],
