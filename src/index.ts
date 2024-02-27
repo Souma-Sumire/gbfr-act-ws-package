@@ -197,8 +197,13 @@ class _GbfrActWs {
     }
   }
 
+  private processActionId: (data: Damage["data"]) => number = ({ flags, action_id }) => {
+    if (flags & (1 << 15)) return -3; // 追击因子
+    return action_id;
+  };
+
   private handleDamageMessage = (data: Damage): void => {
-    const { source, target, damage, action_id } = data.data;
+    const { source, target, damage } = data.data;
     const [, source_idx, source_id, source_party_idx] = source;
     const [, , target_id] = target;
     if (target_id === 0x22a350f) return; // HARDCODE: 对欧根附加炸弹造成的伤害不进行记录
@@ -213,8 +218,9 @@ class _GbfrActWs {
         ) - 1
       ];
     }
+    const actionId = this.processActionId(data.data);
     actor.addAction(
-      new Action(data.time_ms, damage, source, target, action_id),
+      new Action(data.time_ms, damage, source, target, actionId),
     );
   };
 
