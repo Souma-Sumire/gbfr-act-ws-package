@@ -23,7 +23,7 @@ class Action {
     public damage: number,
     public source: DamageSource,
     public target: DamageSource,
-    public actionId: number
+    public actionId: number,
   ) {}
 }
 
@@ -52,9 +52,11 @@ class CombatData {
     const ms = Date.now() - this.#timestamp;
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
-    const MMSS = `${minutes.toString().padStart(2, "0")}:${(seconds % 60)
-      .toString()
-      .padStart(2, "0")}`;
+    const MMSS = `${minutes.toString().padStart(2, "0")}:${
+      (seconds % 60)
+        .toString()
+        .padStart(2, "0")
+    }`;
 
     return { ms, seconds, minutes, MMSS };
   }
@@ -72,7 +74,7 @@ type MessageData = {
 type MessageName = keyof MessageData;
 
 export type MessageHandler<T extends MessageName> = (
-  data: MessageData[T]
+  data: MessageData[T],
 ) => void;
 
 interface Options {
@@ -127,7 +129,7 @@ class _GbfrActWs {
 
   public off<T extends MessageName>(
     event: T,
-    handler: MessageHandler<T>
+    handler: MessageHandler<T>,
   ): void {
     const handlers = this.messageHandlers[event];
     const index = handlers.indexOf(handler);
@@ -168,7 +170,7 @@ class _GbfrActWs {
 
   private emit<T extends MessageName>(
     type: T,
-    callback: (data: MessageHandler<T>) => void
+    callback: (data: MessageHandler<T>) => void,
   ): void {
     const listeners = this.messageHandlers[type];
     listeners.forEach((listener) => callback(listener));
@@ -205,15 +207,14 @@ class _GbfrActWs {
     const combat = this.getLatestCombat();
     let actor = combat.actors.find((v) => v.idx === source_idx);
     if (actor === undefined) {
-      actor =
-        combat.actors[
-          combat.actors.push(
-            new Actor(source_idx, source_id, source_party_idx)
-          ) - 1
-        ];
+      actor = combat.actors[
+        combat.actors.push(
+          new Actor(source_idx, source_id, source_party_idx),
+        ) - 1
+      ];
     }
     actor.addAction(
-      new Action(data.time_ms, damage, source, target, action_id)
+      new Action(data.time_ms, damage, source, target, action_id),
     );
   };
 
@@ -224,10 +225,10 @@ class _GbfrActWs {
 
   private broadcastCombat = (timestamp: number): void => {
     if (
-      (this.lastUpdateTimestamp === 0 ||
-        timestamp - this.lastUpdateTimestamp > this.options.updateInterval) &&
-      this.socket?.readyState === WebSocket.OPEN &&
-      this.inCombat
+      (this.lastUpdateTimestamp === 0
+        || timestamp - this.lastUpdateTimestamp > this.options.updateInterval)
+      && this.socket?.readyState === WebSocket.OPEN
+      && this.inCombat
     ) {
       this.emit("combat_data", (listener) => {
         for (let i = this.combats.length - 1; i >= 0; i--) {
@@ -249,7 +250,7 @@ const numberToHexStringWithZFill = (id: number) => {
   return id.toString(16).padEnd(8, "0");
 };
 
-type Constructor<T = {}> = new (...args: any[]) => T;
+type Constructor<T = {}> = new(...args: any[]) => T;
 
 const singleton = <T extends Constructor>(className: T): T => {
   let instance: InstanceType<T> | null = null;
