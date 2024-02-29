@@ -66,6 +66,7 @@ interface ExternalCombatData {
     type: string;
     idx: number;
     id: number;
+    hexId: string;
     partyIdx: number;
     damage: number;
     damagePerSec: number;

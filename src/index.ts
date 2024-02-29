@@ -72,6 +72,7 @@ interface ExternalActor {
   type: string;
   idx: number;
   id: number;
+  hexId: string;
   partyIdx: number;
   damage: number;
   damagePerSec: number;
@@ -100,6 +101,7 @@ class Actor {
       type: this.type,
       idx: this.idx,
       id: this.id,
+      hexId: this.hexId,
       partyIdx: this.partyIdx,
       damage: this.damage,
       damagePerSec: this.damagePerSec,
