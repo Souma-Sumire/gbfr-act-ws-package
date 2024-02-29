@@ -49,50 +49,38 @@
 
 目前支持3种事件类型，分别是 combatData、enterArea 和 damage。
 
-如果你没有使用TypeScript，你可能需要参考这个类型定义文件。
-
 ```typescript
 
-interface CombatData {
+interface ExternalCombatData {
   title: string;
-  actors: {
-    actions: {
-      timestamp: number;
-      damage: number;
-      source: {
-        type: string;
-        idx: number;
-        id: number;
-        partyIdx: number;
-      };
-      target: {
-        type: string;
-        idx: number;
-        id: number;
-        partyIdx: number;
-      };
-      actionId: number;
-    }[];
-    damage: number;
-    hexId: string;
-    partyIdx: number;
-  }[];
-  get duration(): {
+  duration: {
     ms: number;
     seconds: number;
     minutes: number;
     MMSS: string;
   };
-  get partyDamage(): number;
+  partyDamage: number;
+  partyDamagePerSec: number;
+  partyDamagePerSecInLastOneMinute: number;
+  actors: {
+    type: string;
+    idx: number;
+    id: number;
+    partyIdx: number;
+    damage: number;
+    damagePerSec: number;
+    damagePercentage: number;
+    damageInLastOneMinute: number;
+    damagePerSecInLastOneMinute: number;
+  }[];
 }
 
-
-interface EnterArea {
+interface ExternalEnterArea {
   type: "enterArea";
   timeMs: number;
 }
 
-interface Damage {
+interface ExternalDamage {
   type: "damage";
   timeMs: number;
   data: {
@@ -113,6 +101,5 @@ interface Damage {
     };
   };
 }
-
 
 ```

@@ -36,7 +36,24 @@ interface Damage {
   };
 }
 
+interface ExternalDamage {
+  type: "damage";
+  timeMs: number;
+  data: {
+    actionId: number;
+    damage: number;
+    flags: number;
+    source: SourceOrTarget;
+    target: SourceOrTarget;
+  };
+}
+
 interface EnterArea {
+  type: "enterArea";
+  timeMs: number;
+}
+
+interface ExternalEnterArea {
   type: "enterArea";
   timeMs: number;
 }
@@ -51,27 +68,77 @@ class Action {
   ) {}
 }
 
+interface ExternalActor {
+  type: string;
+  idx: number;
+  id: number;
+  partyIdx: number;
+  damage: number;
+  damagePerSec: number;
+  damagePercentage: number;
+  damageInLastOneMinute: number;
+  damagePerSecInLastOneMinute: number;
+}
+
 class Actor {
   public actions: Action[] = [];
   public damage: number = 0;
+  public damagePerSec: number = 0;
+  public damagePercentage: number = 0;
+  public damageInLastOneMinute: number = 0;
+  public damagePerSecInLastOneMinute: number = 0;
   public hexId: string;
   public addAction(action: Action) {
     this.actions.push(action);
     this.damage += action.damage;
   }
-  constructor(public idx: number, public id: number, public partyIdx: number) {
+  constructor(public type: string, public idx: number, public id: number, public partyIdx: number) {
     this.hexId = numberToHexStringWithZFill(this.id);
+  }
+  get externalActor(): ExternalActor {
+    return {
+      type: this.type,
+      idx: this.idx,
+      id: this.id,
+      partyIdx: this.partyIdx,
+      damage: this.damage,
+      damagePerSec: this.damagePerSec,
+      damagePercentage: this.damagePercentage,
+      damageInLastOneMinute: this.damageInLastOneMinute,
+      damagePerSecInLastOneMinute: this.damagePerSecInLastOneMinute,
+    };
   }
 }
 
+interface Duration {
+  ms: number;
+  seconds: number;
+  minutes: number;
+  MMSS: string;
+}
+
+interface ExternalCombatData {
+  title: string;
+  duration: Duration;
+  partyDamage: number;
+  partyDamagePerSec: number;
+  partyDamagePerSecInLastOneMinute: number;
+  actors: ExternalActor[];
+}
+
 class CombatData {
+  public title: string;
   public actors: Actor[] = [];
-  #timestamp: number;
-  constructor(public title: string) {
-    this.#timestamp = Date.now();
+  public lastTimestamp: number;
+  private startTimestamp: number;
+  public partyDamage: number = 0;
+  constructor(title: string, startTimestamp: number) {
+    this.title = title;
+    this.startTimestamp = startTimestamp;
+    this.lastTimestamp = startTimestamp;
   }
-  public get duration() {
-    const ms = Date.now() - this.#timestamp;
+  get externalData(): ExternalCombatData {
+    const ms = this.lastTimestamp - this.startTimestamp;
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const MMSS = `${minutes.toString().padStart(2, "0")}:${
@@ -79,18 +146,36 @@ class CombatData {
         .toString()
         .padStart(2, "0")
     }`;
+    const partyDamagePerSec = seconds === 0 ? this.partyDamage : Math.round(this.partyDamage / seconds);
+    let partyDamagePerSecInLastOneMinute = 0;
+    this.actors.forEach((v) => {
+      v.damagePerSec = seconds === 0 ? v.damage : Math.round(v.damage / seconds);
+      v.damagePercentage = (v.damage / this.partyDamage) * 100;
+      v.damageInLastOneMinute = v.actions.reduce(
+        (p, c) => c.timestamp + 60000 >= this.lastTimestamp ? p + c.damage : p,
+        0,
+      );
+      v.damagePerSecInLastOneMinute = Math.round(
+        v.damageInLastOneMinute / (seconds === 0 ? 1 : Math.min(60, seconds)),
+      );
+      partyDamagePerSecInLastOneMinute += v.damagePerSecInLastOneMinute;
+    });
 
-    return { ms, seconds, minutes, MMSS };
-  }
-  public get partyDamage() {
-    return this.actors.reduce((sum, actor) => sum + actor.damage, 0);
+    return {
+      title: this.title,
+      duration: { ms, seconds, minutes, MMSS },
+      partyDamage: this.partyDamage,
+      partyDamagePerSec: partyDamagePerSec,
+      partyDamagePerSecInLastOneMinute: partyDamagePerSecInLastOneMinute,
+      actors: this.actors.map((v) => v.externalActor),
+    };
   }
 }
 
 interface MessageData {
-  damage: Damage;
-  enterArea: EnterArea;
-  combatData: CombatData;
+  damage: ExternalDamage;
+  enterArea: ExternalEnterArea;
+  combatData: ExternalCombatData;
 }
 
 type MessageName = keyof MessageData;
@@ -108,19 +193,17 @@ interface Options {
 
 const isDamageMessage = (v: DamageRaw | EnterAreaRaw): v is DamageRaw => v.type === "damage";
 const isEnterAreaMessage = (v: DamageRaw | EnterAreaRaw): v is EnterAreaRaw => v.type === "enter_area";
-const transformDamage = (msg: DamageRaw): Damage => {
-  return {
-    type: "damage",
-    timeMs: msg.time_ms,
-    data: {
-      actionId: msg.data.action_id,
-      damage: msg.data.damage,
-      flags: msg.data.flags,
-      source: transformSourceOrTarget(msg.data.source),
-      target: transformSourceOrTarget(msg.data.target),
-    },
-  };
-};
+const transformDamage = (msg: DamageRaw): Damage => ({
+  type: "damage",
+  timeMs: msg.time_ms,
+  data: {
+    actionId: msg.data.action_id,
+    damage: msg.data.damage,
+    flags: msg.data.flags,
+    source: transformSourceOrTarget(msg.data.source),
+    target: transformSourceOrTarget(msg.data.target),
+  },
+});
 const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
   return {
     type: "enterArea",
@@ -128,11 +211,21 @@ const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
   };
 };
 
-const transformSourceOrTarget = (
-  { "0": type, "1": idx, "2": id, "3": party_idx }: SourceOrTargetRaw,
-): SourceOrTarget => ({ type, idx, id, partyIdx: party_idx });
+const transformSourceOrTarget = ({
+  "0": type,
+  "1": idx,
+  "2": id,
+  "3": party_idx,
+}: SourceOrTargetRaw): SourceOrTarget => ({
+  type,
+  idx,
+  id,
+  partyIdx: party_idx,
+});
 
-const transformMessage = (msg: DamageRaw | EnterAreaRaw): Damage | EnterArea => {
+const transformMessage = (
+  msg: DamageRaw | EnterAreaRaw,
+): Damage | EnterArea => {
   if (isDamageMessage(msg)) {
     return transformDamage(msg);
   } else if (isEnterAreaMessage(msg)) {
@@ -157,9 +250,10 @@ class _GbfrActWs {
     maxCombats: 10,
   };
   private combatSubscriptions = 0;
-  private lastUpdateTimestamp = 0;
+  private lastRafTimestamp = 0;
+  private lastDamageTimestamp = 0;
+  private lastCombatDataTimestamp = 0;
   private rafId: number = -1;
-  private inCombat: boolean = false;
   constructor(options?: Partial<Options>) {
     this.options = { ...this.options, ...options };
     this.connect();
@@ -238,70 +332,84 @@ class _GbfrActWs {
     }, this.options.reconnectTimeout);
   }
 
-  private getLatestCombat(): CombatData {
+  private getLatestCombat(startTimestamp: number): CombatData {
     if (this.combats.length === 0) {
-      this.newCombat();
+      this.newCombat(startTimestamp);
     }
     return this.combats[this.combats.length - 1];
   }
 
-  private newCombat() {
-    this.combats.push(new CombatData(`#${++this.combatCount}`));
+  private newCombat(startTimestamp: number) {
+    this.combats.push(new CombatData(`#${++this.combatCount}`, startTimestamp));
     if (this.combats.length >= this.options.maxCombats) {
       this.combats.shift();
     }
   }
 
-  private processActionId: (data: Damage["data"]) => number = ({ flags, actionId }) => {
+  private processActionId: (data: Damage["data"]) => number = ({
+    flags,
+    actionId,
+  }) => {
     if (flags & (1 << 15)) return -3; // 追击因子
     return actionId;
   };
 
   private handleDamageMessage = (data: Damage): void => {
     const { damage, source, target } = data.data;
-    const { type: _sourceType, idx: sourceIdx, id: sourceId, partyIdx: sourcePartyIdx } = source;
-    const { type: _targetType, idx: _targetIdx, id: targetId, partyIdx: _targetPartyIdx } = target;
+    const {
+      type: sourceType,
+      idx: sourceIdx,
+      id: sourceId,
+      partyIdx: sourcePartyIdx,
+    } = source;
+    const {
+      type: _targetType,
+      idx: _targetIdx,
+      id: targetId,
+      partyIdx: _targetPartyIdx,
+    } = target;
     if (targetId === 0x22a350f) return; // HARDCODE: 对欧根附加炸弹造成的伤害不进行记录
     if (sourcePartyIdx === -1) return; // 奥义连锁？
-    this.inCombat = true;
-    const combat = this.getLatestCombat();
+    const combat = this.getLatestCombat(data.timeMs);
+    combat.partyDamage += damage;
+    combat.lastTimestamp = data.timeMs;
     let actor = combat.actors.find((v) => v.idx === sourceIdx);
     if (actor === undefined) {
       actor = combat.actors[
         combat.actors.push(
-          new Actor(sourceIdx, sourceId, sourcePartyIdx),
+          new Actor(sourceType, sourceIdx, sourceId, sourcePartyIdx),
         ) - 1
       ];
+      combat.actors.sort((a, b) => a.partyIdx - b.partyIdx);
     }
     const actionId = this.processActionId(data.data);
-    actor.addAction(
-      new Action(data.timeMs, damage, source, target, actionId),
-    );
+    actor.addAction(new Action(data.timeMs, damage, source, target, actionId));
+    this.lastDamageTimestamp = data.timeMs;
   };
 
-  private handleEnterAreaMessage = (_data: EnterArea): void => {
-    this.inCombat = false;
-    this.newCombat();
+  private handleEnterAreaMessage = (data: EnterArea): void => {
+    this.newCombat(data.timeMs);
   };
 
-  private broadcastCombat = (timestamp: number): void => {
+  private broadcastCombat = (currentTimestamp: number): void => {
     if (
-      (this.lastUpdateTimestamp === 0
-        || timestamp - this.lastUpdateTimestamp > this.options.updateInterval)
+      (this.lastRafTimestamp === 0
+        || currentTimestamp - this.lastRafTimestamp > this.options.updateInterval)
       && this.socket?.readyState === WebSocket.OPEN
-      && this.inCombat
     ) {
-      this.emit("combatData", (listener) => {
-        for (let i = this.combats.length - 1; i >= 0; i--) {
-          const combat = this.combats[i];
-          if (combat.partyDamage > 0) {
-            combat.actors.sort((a, b) => a.partyIdx - b.partyIdx);
-            listener(combat);
-            break;
+      if (this.lastDamageTimestamp + 1000 > this.lastCombatDataTimestamp) {
+        this.emit("combatData", (listener) => {
+          for (let i = this.combats.length - 1; i >= 0; i--) {
+            const combat = this.combats[i];
+            if (combat.partyDamage > 0) {
+              listener(combat.externalData);
+              break;
+            }
           }
-        }
-      });
-      this.lastUpdateTimestamp = timestamp;
+        });
+        this.lastCombatDataTimestamp = this.lastDamageTimestamp;
+      }
+      this.lastRafTimestamp = currentTimestamp;
     }
     this.rafId = requestAnimationFrame(this.broadcastCombat);
   };
@@ -326,4 +434,5 @@ const singleton = <T extends Constructor>(className: T): T => {
 };
 
 const GbfrActWs = singleton(_GbfrActWs);
+
 export { GbfrActWs };
