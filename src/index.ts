@@ -79,6 +79,7 @@ interface ExternalActor {
   damagePercentage: number;
   damageInLastOneMinute: number;
   damagePerSecInLastOneMinute: number;
+  actions: Action[];
 }
 
 class Actor {
@@ -108,6 +109,7 @@ class Actor {
       damagePercentage: this.damagePercentage,
       damageInLastOneMinute: this.damageInLastOneMinute,
       damagePerSecInLastOneMinute: this.damagePerSecInLastOneMinute,
+      actions: this.actions,
     };
   }
 }

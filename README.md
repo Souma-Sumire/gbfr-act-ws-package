@@ -73,6 +73,13 @@ interface ExternalCombatData {
     damagePercentage: number;
     damageInLastOneMinute: number;
     damagePerSecInLastOneMinute: number;
+    actions: {
+      timestamp: number;
+      damage: number;
+      source: { type: string; idx: number; id: number; partyIdx: number };
+      target: { type: string; idx: number; id: number; partyIdx: number };
+      actionId: number;
+    }[];
   }[];
 }
 
@@ -88,19 +95,10 @@ interface ExternalDamage {
     actionId: number;
     damage: number;
     flags: number;
-    source: {
-      type: string;
-      idx: number;
-      id: number;
-      partyIdx: number;
-    };
-    target: {
-      type: string;
-      idx: number;
-      id: number;
-      partyIdx: number;
-    };
+    source: { type: string; idx: number; id: number; partyIdx: number };
+    target: { type: string; idx: number; id: number; partyIdx: number };
   };
 }
+
 
 ```
