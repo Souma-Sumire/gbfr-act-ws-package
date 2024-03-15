@@ -5,6 +5,27 @@ type SourceOrTargetRaw = [
 	party_idx: number,
 ];
 
+interface Sigils {
+	first_trait_id: number;
+	first_trait_level: number;
+	second_trait_id: number;
+	second_trait_level: number;
+	sigil_id: number;
+	sigil_level: number;
+}
+
+interface LoadPartyRaw {
+	type: "load_party";
+	time_ms: number;
+	data: {
+		sigils: Sigils[];
+		is_online: number;
+		c_name: string;
+		d_name: string;
+		common_info: SourceOrTargetRaw;
+	}[];
+}
+
 interface DamageRaw {
 	type: "damage";
 	time_ms: number;
@@ -22,6 +43,14 @@ interface EnterAreaRaw {
 	time_ms: number;
 }
 
+interface UnknownRaw {
+	type: "string";
+	time_ms: number;
+}
+
+type RawEvent = LoadPartyRaw | DamageRaw | EnterAreaRaw | UnknownRaw;
+type Event = LoadParty | Damage | EnterArea;
+
 interface SourceOrTarget {
 	type: string;
 	idx: number;
@@ -29,19 +58,13 @@ interface SourceOrTarget {
 	partyIdx: number;
 }
 
-interface Damage {
-	type: "damage";
+interface LoadParty {
+	type: "loadParty";
 	timeMs: number;
-	data: {
-		actionId: number;
-		damage: number;
-		flags: number;
-		source: SourceOrTarget;
-		target: SourceOrTarget;
-	};
+	data: LoadPartyRaw["data"];
 }
 
-interface ExternalDamage {
+interface Damage {
 	type: "damage";
 	timeMs: number;
 	data: {
@@ -58,10 +81,9 @@ interface EnterArea {
 	timeMs: number;
 }
 
-interface ExternalEnterArea {
-	type: "enterArea";
-	timeMs: number;
-}
+interface ExternalEnterArea extends EnterArea {}
+interface ExternalDamage extends Damage {}
+interface ExternalLoadParty extends LoadParty {}
 
 class Action {
 	constructor(
@@ -190,6 +212,7 @@ interface MessageData {
 	damage: ExternalDamage;
 	enterArea: ExternalEnterArea;
 	combatData: ExternalCombatData;
+	loadParty: ExternalLoadParty;
 }
 
 type MessageName = keyof MessageData;
@@ -205,10 +228,10 @@ interface Options {
 	maxCombats: number;
 }
 
-const isDamageMessage = (v: DamageRaw | EnterAreaRaw): v is DamageRaw =>
-	v.type === "damage";
-const isEnterAreaMessage = (v: DamageRaw | EnterAreaRaw): v is EnterAreaRaw =>
+const isDamageMessage = (v: RawEvent): v is DamageRaw => v.type === "damage";
+const isEnterAreaMessage = (v: RawEvent): v is EnterAreaRaw =>
 	v.type === "enter_area";
+const isLoadParty = (v: RawEvent): v is LoadPartyRaw => v.type === "load_party";
 const transformDamage = (msg: DamageRaw): Damage => ({
 	type: "damage",
 	timeMs: msg.time_ms,
@@ -226,6 +249,13 @@ const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
 		timeMs: msg.time_ms,
 	};
 };
+const transformLoadParty = (msg: LoadPartyRaw): LoadParty => {
+	return {
+		type: "loadParty",
+		timeMs: msg.time_ms,
+		data: msg.data,
+	};
+};
 
 const transformSourceOrTarget = ({
 	"0": type,
@@ -239,16 +269,17 @@ const transformSourceOrTarget = ({
 	partyIdx: party_idx,
 });
 
-const transformMessage = (
-	msg: DamageRaw | EnterAreaRaw,
-): Damage | EnterArea => {
+const transformMessage = (msg: RawEvent): Event => {
 	if (isDamageMessage(msg)) {
 		return transformDamage(msg);
 	}
 	if (isEnterAreaMessage(msg)) {
 		return transformEnterArea(msg);
 	}
-	throw new Error(`Unknown message type: ${JSON.stringify(msg)}`);
+	if (isLoadParty(msg)) {
+		return transformLoadParty(msg);
+	}
+	throw new Error(`Unknown message type: ${(msg as RawEvent).type}`);
 };
 
 class _GbfrActWs {
@@ -256,6 +287,7 @@ class _GbfrActWs {
 		damage: [],
 		enterArea: [],
 		combatData: [],
+		loadParty: [],
 	};
 	private socket: WebSocket | null = null;
 	private combats: CombatData[] = [];
@@ -324,11 +356,13 @@ class _GbfrActWs {
 		});
 
 		this.socket.addEventListener("message", (event) => {
-			const msg: DamageRaw | EnterAreaRaw = JSON.parse(event.data);
+			const msg: RawEvent = JSON.parse(event.data);
 			try {
 				const transformedMsg = transformMessage(msg);
 				this.emit(transformedMsg.type, (listener) => listener(transformedMsg));
-			} catch (e) {}
+			} catch (e) {
+				console.error(`无法处理消息: ${e}`);
+			}
 		});
 
 		this.socket.addEventListener("close", () => {
