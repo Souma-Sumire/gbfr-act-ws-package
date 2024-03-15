@@ -9,49 +9,41 @@
 ## 初始化
 
 ```javascript
+import { GbfrActWs } from "gbfr-act-ws-package";
 
-  import { GbfrActWs } from "gbfr-act-ws-package";
+const gbfrActWs = new GbfrActWs();
 
-  const gbfrActWs = new GbfrActWs();
-
-  gbfrActWs.on("combatData", (data) => {
-    console.log(data);
-  });
-
+gbfrActWs.on("combatData", (data) => {
+  console.log(data);
+});
 ```
 
-你可以在构造函数中传入一个可选的options配置对象。
+你可以在构造函数中传入一个可选的 options 配置对象。
 
 ```typescript
-
-  interface Options {
-    port?: number;
-    updateInterval?: number;
-    reconnectTimeout?: number;
-    maxCombats?: number;
-  };
-
+interface Options {
+  port?: number;
+  updateInterval?: number;
+  reconnectTimeout?: number;
+  maxCombats?: number;
+}
 ```
 
 例如：
 
 ```javascript
 
-  const options = {
-    port: 24399;
-  };
-
+  const options = { port: 24399 };
   const gbfrActWs = new GbfrActWs(options);
 
 ```
 
-## 回调参数 data 的类型
+## 回调参数 data 类型
 
-目前支持3种事件类型，分别是 combatData、enterArea 和 damage。
+### combatData
 
 ```typescript
-
-interface ExternalCombatData {
+interface CombatData {
   title: string;
   duration: {
     ms: number;
@@ -76,19 +68,37 @@ interface ExternalCombatData {
     actions: {
       timestamp: number;
       damage: number;
-      source: { type: string; idx: number; id: number; partyIdx: number };
-      target: { type: string; idx: number; id: number; partyIdx: number };
+      source: {
+        type: string;
+        idx: number;
+        id: number;
+        partyIdx: number;
+      };
+      target: {
+        type: string;
+        idx: number;
+        id: number;
+        partyIdx: number;
+      };
       actionId: number;
     }[];
   }[];
 }
+```
 
-interface ExternalEnterArea {
+## enterArea
+
+```typescript
+interface EnterArea {
   type: "enterArea";
   timeMs: number;
 }
+```
 
-interface ExternalDamage {
+## damage
+
+```typescript
+interface Damage {
   type: "damage";
   timeMs: number;
   data: {
@@ -99,6 +109,42 @@ interface ExternalDamage {
     target: { type: string; idx: number; id: number; partyIdx: number };
   };
 }
+```
 
+## loadParty
 
+```typescript
+interface LoadParty {
+  type: "loadParty";
+  timeMs: number;
+  data: {
+    weapon: {
+      weaponId: number;
+      skill1: number;
+      skill1Lv: number;
+      skill2: number;
+      skill2Lv: number;
+      skill3: number;
+      skill3Lv: number;
+      blessItem: number;
+    };
+    sigils: {
+      firstTraitId: number;
+      firstTraitLevel: number;
+      secondTraitId: number;
+      secondTraitLevel: number;
+      sigilId: number;
+      sigilLevel: number;
+    }[];
+    isOnline: number;
+    cName: string;
+    dName: string;
+    commonInfo: {
+      type: string;
+      idx: number;
+      id: number;
+      partyIdx: number;
+    };
+  }[];
+}
 ```
