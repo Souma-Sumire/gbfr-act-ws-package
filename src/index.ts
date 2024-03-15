@@ -1,9 +1,4 @@
-type SourceOrTargetRaw = [
-	type: string,
-	idx: number,
-	id: number,
-	party_idx: number,
-];
+type ActorInfoRaw = [type: string, idx: number, id: number, party_idx: number];
 
 interface SigilsRaw {
 	first_trait_id: number;
@@ -29,7 +24,7 @@ interface PartyMemberRaw {
 	is_online: number;
 	c_name: string;
 	d_name: string;
-	common_info: SourceOrTargetRaw;
+	common_info: ActorInfoRaw;
 }
 
 interface Sigils {
@@ -56,7 +51,7 @@ interface PartyMember {
 	isOnline: number;
 	cName: string;
 	dName: string;
-	commonInfo: SourceOrTargetRaw;
+	commonInfo: ActorInfo;
 }
 
 interface LoadPartyRaw {
@@ -72,8 +67,8 @@ interface DamageRaw {
 		action_id: number;
 		damage: number;
 		flags: number;
-		source: SourceOrTargetRaw;
-		target: SourceOrTargetRaw;
+		source: ActorInfoRaw;
+		target: ActorInfoRaw;
 	};
 }
 
@@ -90,7 +85,7 @@ interface UnknownRaw {
 type RawEvent = LoadPartyRaw | DamageRaw | EnterAreaRaw | UnknownRaw;
 type Event = LoadParty | Damage | EnterArea;
 
-interface SourceOrTarget {
+interface ActorInfo {
 	type: string;
 	idx: number;
 	id: number;
@@ -110,8 +105,8 @@ interface Damage {
 		actionId: number;
 		damage: number;
 		flags: number;
-		source: SourceOrTarget;
-		target: SourceOrTarget;
+		source: ActorInfo;
+		target: ActorInfo;
 	};
 }
 
@@ -124,13 +119,13 @@ class Action {
 	constructor(
 		public timestamp: number,
 		public damage: number,
-		public source: SourceOrTarget,
-		public target: SourceOrTarget,
+		public source: ActorInfo,
+		public target: ActorInfo,
 		public actionId: number,
 	) {}
 }
 
-interface ExternalActor {
+interface Actor {
 	type: string;
 	idx: number;
 	id: number;
@@ -144,7 +139,7 @@ interface ExternalActor {
 	actions: Action[];
 }
 
-class Actor {
+class ActorRaw {
 	public actions: Action[] = [];
 	public damage = 0;
 	public damagePerSec = 0;
@@ -164,7 +159,7 @@ class Actor {
 	) {
 		this.hexId = numberToHexStringWithZFill(this.id);
 	}
-	get externalActor(): ExternalActor {
+	get transformActor(): Actor {
 		return {
 			type: this.type,
 			idx: this.idx,
@@ -188,18 +183,18 @@ interface Duration {
 	MMSS: string;
 }
 
-interface ExternalCombatData {
+interface CombatData {
 	title: string;
 	duration: Duration;
 	partyDamage: number;
 	partyDamagePerSec: number;
 	partyDamagePerSecInLastOneMinute: number;
-	actors: ExternalActor[];
+	actors: Actor[];
 }
 
-class CombatData {
+class CombatDataInternal {
 	public title: string;
-	public actors: Actor[] = [];
+	public actors: ActorRaw[] = [];
 	public lastTimestamp: number;
 	private startTimestamp: number;
 	public partyDamage = 0;
@@ -208,7 +203,7 @@ class CombatData {
 		this.startTimestamp = startTimestamp;
 		this.lastTimestamp = startTimestamp;
 	}
-	get externalData(): ExternalCombatData {
+	get transformData(): CombatData {
 		const ms = this.lastTimestamp - this.startTimestamp;
 		const seconds = Math.floor(ms / 1000);
 		const minutes = Math.floor(seconds / 60);
@@ -238,7 +233,7 @@ class CombatData {
 			partyDamage: this.partyDamage,
 			partyDamagePerSec: partyDamagePerSec,
 			partyDamagePerSecInLastOneMinute: partyDamagePerSecInLastOneMinute,
-			actors: this.actors.map((v) => v.externalActor),
+			actors: this.actors.map((v) => v.transformActor),
 		};
 	}
 }
@@ -246,7 +241,7 @@ class CombatData {
 interface MessageData {
 	damage: Damage;
 	enterArea: EnterArea;
-	combatData: ExternalCombatData;
+	combatData: CombatData;
 	loadParty: LoadParty;
 }
 
@@ -274,8 +269,8 @@ const transformDamage = (msg: DamageRaw): Damage => ({
 		actionId: msg.data.action_id,
 		damage: msg.data.damage,
 		flags: msg.data.flags,
-		source: transformSourceOrTarget(msg.data.source),
-		target: transformSourceOrTarget(msg.data.target),
+		source: transformActorInfo(msg.data.source),
+		target: transformActorInfo(msg.data.target),
 	},
 });
 const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
@@ -289,7 +284,7 @@ const transformLoadParty = (msg: LoadPartyRaw): LoadParty => {
 		(v) => {
 			return {
 				cName: v.c_name,
-				commonInfo: v.common_info,
+				commonInfo: transformActorInfo(v.common_info),
 				dName: v.d_name,
 				isOnline: v.is_online,
 				sigils: v.sigils.map((s) => ({
@@ -320,17 +315,12 @@ const transformLoadParty = (msg: LoadPartyRaw): LoadParty => {
 	};
 };
 
-const transformSourceOrTarget = ({
+const transformActorInfo = ({
 	"0": type,
 	"1": idx,
 	"2": id,
-	"3": party_idx,
-}: SourceOrTargetRaw): SourceOrTarget => ({
-	type,
-	idx,
-	id,
-	partyIdx: party_idx,
-});
+	"3": partyIdx,
+}: ActorInfoRaw): ActorInfo => ({ type, idx, id, partyIdx });
 
 const transformMessage = (msg: RawEvent): Event => {
 	if (isDamageMessage(msg)) {
@@ -353,7 +343,7 @@ class _GbfrActWs {
 		loadParty: [],
 	};
 	private socket: WebSocket | null = null;
-	private combats: CombatData[] = [];
+	private combats: CombatDataInternal[] = [];
 	private combatCount = 0;
 	private options: Options = {
 		port: 24399,
@@ -450,7 +440,7 @@ class _GbfrActWs {
 		}, this.options.reconnectTimeout);
 	}
 
-	private getLatestCombat(startTimestamp: number): CombatData {
+	private getLatestCombat(startTimestamp: number): CombatDataInternal {
 		if (this.combats.length === 0) {
 			this.newCombat(startTimestamp);
 		}
@@ -458,7 +448,9 @@ class _GbfrActWs {
 	}
 
 	private newCombat(startTimestamp: number) {
-		this.combats.push(new CombatData(`#${++this.combatCount}`, startTimestamp));
+		this.combats.push(
+			new CombatDataInternal(`#${++this.combatCount}`, startTimestamp),
+		);
 		if (this.combats.length >= this.options.maxCombats) {
 			this.combats.shift();
 		}
@@ -496,7 +488,7 @@ class _GbfrActWs {
 			actor =
 				combat.actors[
 					combat.actors.push(
-						new Actor(sourceType, sourceIdx, sourceId, sourcePartyIdx),
+						new ActorRaw(sourceType, sourceIdx, sourceId, sourcePartyIdx),
 					) - 1
 				];
 			combat.actors.sort((a, b) => a.partyIdx - b.partyIdx);
@@ -522,7 +514,7 @@ class _GbfrActWs {
 					for (let i = this.combats.length - 1; i >= 0; i--) {
 						const combat = this.combats[i];
 						if (combat.partyDamage > 0) {
-							listener(combat.externalData);
+							listener(combat.transformData);
 							break;
 						}
 					}
@@ -570,7 +562,7 @@ class _FakeCombatData {
 		}
 		this.intervalId = setInterval(() => {
 			const fakeMs = Math.floor(Math.random() * 10000);
-			const fakeCombatData: ExternalCombatData = {
+			const fakeCombatData: CombatData = {
 				title: "Mock Combat",
 				duration: {
 					ms: fakeMs,
