@@ -1,7 +1,7 @@
 {
   "name": "gbfr-act-ws-package",
   "private": false,
-  "version": "2.1.5",
+  "version": "2.2.0",
   "license": "MIT",
   "type": "module",
   "files": [
