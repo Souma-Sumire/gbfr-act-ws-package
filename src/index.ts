@@ -5,7 +5,7 @@ type SourceOrTargetRaw = [
 	party_idx: number,
 ];
 
-interface Sigils {
+interface SigilsRaw {
 	first_trait_id: number;
 	first_trait_level: number;
 	second_trait_id: number;
@@ -14,16 +14,55 @@ interface Sigils {
 	sigil_level: number;
 }
 
+interface PartyMemberRaw {
+	weapon: {
+		weapon_id: number;
+		skill1: number;
+		skill1_lv: number;
+		skill2: number;
+		skill2_lv: number;
+		skill3: number;
+		skill3_lv: number;
+		bless_item: number;
+	};
+	sigils: SigilsRaw[];
+	is_online: number;
+	c_name: string;
+	d_name: string;
+	common_info: SourceOrTargetRaw;
+}
+
+interface Sigils {
+	firstTraitId: number;
+	firstTraitLevel: number;
+	secondTraitId: number;
+	secondTraitLevel: number;
+	sigilId: number;
+	sigilLevel: number;
+}
+
+interface PartyMember {
+	weapon: {
+		weaponId: number;
+		skill1: number;
+		skill1Lv: number;
+		skill2: number;
+		skill2Lv: number;
+		skill3: number;
+		skill3Lv: number;
+		blessItem: number;
+	};
+	sigils: Sigils[];
+	isOnline: number;
+	cName: string;
+	dName: string;
+	commonInfo: SourceOrTargetRaw;
+}
+
 interface LoadPartyRaw {
 	type: "load_party";
 	time_ms: number;
-	data: {
-		sigils: Sigils[];
-		is_online: number;
-		c_name: string;
-		d_name: string;
-		common_info: SourceOrTargetRaw;
-	}[];
+	data: (PartyMemberRaw | null)[];
 }
 
 interface DamageRaw {
@@ -61,7 +100,7 @@ interface SourceOrTarget {
 interface LoadParty {
 	type: "loadParty";
 	timeMs: number;
-	data: LoadPartyRaw["data"];
+	data: PartyMember[];
 }
 
 interface Damage {
@@ -80,10 +119,6 @@ interface EnterArea {
 	type: "enterArea";
 	timeMs: number;
 }
-
-interface ExternalEnterArea extends EnterArea {}
-interface ExternalDamage extends Damage {}
-interface ExternalLoadParty extends LoadParty {}
 
 class Action {
 	constructor(
@@ -209,10 +244,10 @@ class CombatData {
 }
 
 interface MessageData {
-	damage: ExternalDamage;
-	enterArea: ExternalEnterArea;
+	damage: Damage;
+	enterArea: EnterArea;
 	combatData: ExternalCombatData;
-	loadParty: ExternalLoadParty;
+	loadParty: LoadParty;
 }
 
 type MessageName = keyof MessageData;
@@ -250,10 +285,38 @@ const transformEnterArea = (msg: EnterAreaRaw): EnterArea => {
 	};
 };
 const transformLoadParty = (msg: LoadPartyRaw): LoadParty => {
+	const data = (msg.data.filter((v) => v !== null) as PartyMemberRaw[]).map(
+		(v) => {
+			return {
+				cName: v.c_name,
+				commonInfo: v.common_info,
+				dName: v.d_name,
+				isOnline: v.is_online,
+				sigils: v.sigils.map((s) => ({
+					firstTraitId: s.first_trait_id,
+					firstTraitLevel: s.first_trait_level,
+					secondTraitId: s.second_trait_id,
+					secondTraitLevel: s.second_trait_level,
+					sigilId: s.sigil_id,
+					sigilLevel: s.sigil_level,
+				})),
+				weapon: {
+					blessItem: v.weapon.bless_item,
+					skill1: v.weapon.skill1,
+					skill1Lv: v.weapon.skill1_lv,
+					skill2: v.weapon.skill2,
+					skill2Lv: v.weapon.skill2_lv,
+					skill3: v.weapon.skill3,
+					skill3Lv: v.weapon.skill3_lv,
+					weaponId: v.weapon.weapon_id,
+				},
+			};
+		},
+	);
 	return {
 		type: "loadParty",
 		timeMs: msg.time_ms,
-		data: msg.data,
+		data,
 	};
 };
 
