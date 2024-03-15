@@ -458,7 +458,7 @@ const singleton = <T extends Constructor>(className: T): T => {
 	}) as T;
 };
 
-class FakeCombatData {
+class _FakeCombatData {
 	private intervalId: NodeJS.Timeout | null = null;
 	private callback: MessageHandler<"combatData">;
 	constructor(callback: MessageHandler<"combatData">) {
@@ -503,5 +503,6 @@ class FakeCombatData {
 }
 
 const GbfrActWs = singleton(_GbfrActWs);
+const FakeCombatData = singleton(_FakeCombatData);
 
 export { FakeCombatData, GbfrActWs };
